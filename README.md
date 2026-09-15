@@ -16,8 +16,7 @@ This system automates the full lifecycle of a quantitative sports betting model.
 *   **Feature Engineering (`!data_processing.py` & `!Elo_rest.py`):** Unpivots raw data to create continuous team timelines. Calculates pre-match Exponential Moving Averages (EMA) and dynamic Elo ratings accounting for home-field advantage while strictly preventing data leakage.
 *   **Machine Learning (`!ml_predict_probabilities.py`):** Trains an XGBoost classifier on historical data, outputting soft probabilities for Home/Draw/Away outcomes. 
 *   **Live Operations (`!app.py` & `!live_predictor.py`):** A Flask backend that orchestrates a "Master Sync" process. It fetches real-time bookmaker odds, compares them against the model's probabilities to find Value Bets, and calculates optimal fractional Kelly stakes.
-*   **Backtesting (`!ev_backtester.py`):** Simulates historical profitability by merging past predictions with historical closing odds, demonstrating an understanding of Expected Value and risk management.
-
+*   **Backtesting (`!ev_backtester.py`):** Simulates historical profitability by merging past predictions with historical closing odds (sourced from football-data.co.uk), demonstrating an understanding of Expected Value and risk management. Note: Historical odds CSVs are only required for backtesting, not for live weekly operations.
 ## Model Performance & Accuracy
 The current XGBoost classification model operates at a **46.58% accuracy** on the hold-out validation set. 
 
@@ -36,3 +35,6 @@ While this number might seem low in a standard machine learning context, it is i
     python !app.py
     ```
 4.  **Initialize the System:** Open `http://127.0.0.1:5000` in your web browser. Click the **Master Sync** button on the dashboard to trigger the automated data collection, pipeline execution, and live prediction engine.
+
+   ### Note on Initial Setup (Cold Start)
+Because this application is entirely self-hosted and generates its own local SQLite databases and JSON cache files, the very first time you launch the dashboard, it is in a "cold" state. You may need to trigger the **Master Sync** or data collection pipelines once or twice from the UI to fully generate the necessary backend files. Once the initial databases are populated, subsequent syncs will run seamlessly in a single click.
