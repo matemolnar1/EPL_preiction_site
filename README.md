@@ -34,3 +34,5 @@ While this number might seem low in a standard machine learning context, it is i
 3.  **Launch the Dashboard:** Run the web application locally:
     ```bash
     python !app.py
+    ```
+4.  **Initialize the System:** Open `http://127.0.0.1:5000` in your web browser. Click the **Master Sync** button on the dashboard to trigger the automated data collection, pipeline execution, and live prediction engine.
