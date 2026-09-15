@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EPL Quant Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { background-color: #0b0f17; color: #e2e8f0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        .card { background-color: #131b2e; border: 1px solid #1e293b; }
+        .inner-card { background-color: #0a0f1d; border: 1px solid #1e293b; }
+        .console-box { background-color: #050811; border: 1px solid #1e293b; font-family: monospace; }
+        .badge-w { background-color: #065f46; color: #34d399; }
+        .badge-d { background-color: #374151; color: #9ca3af; }
+        .badge-l { background-color: #881337; color: #f43f5e; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <!-- Main Header -->
+    <header class="card border-b border-slate-800 px-6 py-3 flex justify-between items-center sticky top-0 z-50">
+        <div class="flex items-center space-x-3">
+            <span class="text-xl font-black tracking-wider text-emerald-400">EPL QUANT</span>
+            <span class="text-xs bg-slate-800 text-slate-400 px-2 py-1 rounded border border-slate-700">v4.8 • Budapest CEST</span>
+        </div>
+
+        <!-- Action Buttons: Quick odds update and weekly Master Sync -->
+        <div class="flex items-center space-x-2">
+            <button onclick="triggerPredictionsOnly()" id="btn-quick-odds" class="bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-cyan-800 font-bold px-3 py-1.5 rounded-lg text-xs flex items-center space-x-1.5 transition">
+                <span>⚡ Friss Oddsok Lekérése (5 mp)</span>
+            </button>
+            <button onclick="runMasterSync()" id="btn-master-sync" class="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black font-extrabold px-3.5 py-1.5 rounded-lg text-xs flex items-center space-x-1.5 shadow-lg transition">
+                <span>🚀 Heti Fordulózárás (Master Sync)</span>
+            </button>
+        </div>
+
+        <nav class="flex space-x-1">
+            <button id="tab-tips-btn" onclick="switchTab('tips')" class="px-3.5 py-1.5 rounded font-medium text-xs transition bg-emerald-500 text-black">⚽ Meccsek & Value</button>
+            <button id="tab-bankroll-btn" onclick="switchTab('bankroll')" class="px-3.5 py-1.5 rounded font-medium text-xs transition text-slate-400 hover:text-white">💼 Portfólió & Záró Odds</button>
+            <button id="tab-table-btn" onclick="switchTab('table')" class="px-3.5 py-1.5 rounded font-medium text-xs transition text-slate-400 hover:text-white">🏆 Tabella & Elo</button>
+            <button id="tab-pipeline-btn" onclick="switchTab('pipeline')" class="px-3.5 py-1.5 rounded font-medium text-xs transition text-slate-400 hover:text-white">⚙️ Karbantartás</button>
+        </nav>
+    </header>
+
+    <main class="flex-1 p-6 max-w-7xl mx-auto w-full">
+
+        <div id="sync-log-wrapper" class="hidden space-y-2 mb-6">
+            <div class="flex justify-between items-center">
+                <span class="text-xs uppercase font-bold text-emerald-400 flex items-center space-x-2">
+                    <span class="animate-pulse">●</span>
+                    <span>Folyamatnapló</span>
+                </span>
+                <button onclick="document.getElementById('sync-log-wrapper').classList.add('hidden')" class="text-xs text-slate-500 hover:text-slate-300">Bezárás ✕</button>
+            </div>
+            <pre id="sync-console-output" class="console-box p-4 rounded-lg text-slate-300 text-xs max-h-56 overflow-y-auto whitespace-pre-wrap"></pre>
+        </div>
+
+        <!-- TAB 1: MATCHES -->
+        <section id="tab-tips" class="space-y-6">
+            <div class="flex justify-between items-center flex-wrap gap-4">
+                <div>
+                    <h1 class="text-2xl font-bold text-white">Mérkőzések & Értékkereső</h1>
+                    <p class="text-slate-400 text-xs mt-0.5">
+                        <span class="text-emerald-400 font-semibold">⚡ Aktuális Forduló (Következő 5 nap):</span> Ezekre érdemes most fogadni. A távolabbi meccsek piaca még nem likvid!
+                    </p>
+                </div>
+                
+                <div class="flex items-center space-x-2 bg-slate-900 p-1.5 rounded-lg border border-slate-800 text-xs">
+                    <span class="text-slate-400 px-1">Szűrés:</span>
+                    <button id="filter-current-btn" onclick="setMatchFilter('current')" class="px-2.5 py-1 rounded font-semibold bg-emerald-500 text-black transition">Csak Következő Forduló</button>
+                    <button id="filter-all-btn" onclick="setMatchFilter('all')" class="px-2.5 py-1 rounded text-slate-400 hover:text-white transition">Összes (25 meccs)</button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div class="card p-4 rounded-lg">
+                    <div class="text-xs text-slate-400 font-semibold uppercase">Megjelenített Meccsek</div>
+                    <div id="stat-total" class="text-2xl font-bold text-white mt-1">0 db</div>
+                </div>
+                <div class="card p-4 rounded-lg">
+                    <div class="text-xs text-slate-400 font-semibold uppercase">🔥 Value Bet</div>
+                    <div id="stat-value" class="text-2xl font-bold text-emerald-400 mt-1">0 db</div>
+                </div>
+                <div class="card p-4 rounded-lg">
+                    <div class="text-xs text-slate-400 font-semibold uppercase">⚠️ Anomália / Szűrt</div>
+                    <div id="stat-anomaly" class="text-2xl font-bold text-amber-400 mt-1">0 db</div>
+                </div>
+                <div class="card p-4 rounded-lg">
+                    <div class="text-xs text-slate-400 font-semibold uppercase">Javasolt Össztét (K/4)</div>
+                    <div id="stat-stake" class="text-2xl font-bold text-cyan-400 mt-1">0.00%</div>
+                </div>
+            </div>
+
+            <div id="matches-container" class="space-y-3">
+                <div class="card p-8 text-center text-slate-500">Adatok betöltése...</div>
+            </div>
+        </section>
+
+        <!-- TAB 2: BANKROLL & CLOSING ODDS -->
+        <section id="tab-bankroll" class="space-y-6 hidden">
+            <div class="flex justify-between items-center flex-wrap gap-4">
+                <div>
+                    <h1 class="text-2xl font-bold text-white">Bankroll & Záró Odds (CLV) Napló</h1>
+                    <p class="text-slate-400 text-xs mt-0.5">A meccsek lefújása után a rendszer <b>automatikusan kiértékeli</b> a fogadásaidat a FotMob alapján.</p>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <button onclick="autoSettleBets()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition shadow">
+                        🤖 Eredmények Ellenőrzése Most (Auto-Settle)
+                    </button>
+                    <div class="flex items-center space-x-2 bg-slate-900 p-1.5 rounded-lg border border-slate-800">
+                        <span class="text-xs text-slate-400">Kezdőtőke:</span>
+                        <input type="number" id="input-init-bankroll" class="w-20 bg-slate-800 text-white font-mono text-xs px-2 py-0.5 rounded border border-slate-700" value="100000">
+                        <button onclick="updateBankrollSettings()" class="bg-slate-700 hover:bg-slate-600 text-white text-xs px-2 py-0.5 rounded">Mentés</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bankroll Summary -->
+            <div class="grid grid-cols-2 md:grid-cols-6 gap-3">
+                <div class="card p-4 rounded-lg">
+                    <div class="text-[11px] text-slate-400 uppercase font-semibold">Aktuális Tőke</div>
+                    <div id="br-current" class="text-xl font-bold font-mono text-white mt-1">100 000 Ft</div>
+                </div>
+                <div class="card p-4 rounded-lg">
+                    <div class="text-[11px] text-slate-400 uppercase font-semibold">Összes PnL</div>
+                    <div id="br-pnl" class="text-xl font-bold font-mono text-slate-400 mt-1">0 Ft</div>
+                </div>
+                <div class="card p-4 rounded-lg">
+                    <div class="text-[11px] text-slate-400 uppercase font-semibold">ROI (Megtérülés)</div>
+                    <div id="br-roi" class="text-xl font-bold font-mono text-slate-400 mt-1">0.00%</div>
+                </div>
+                <div class="card p-4 rounded-lg">
+                    <div class="text-[11px] text-slate-400 uppercase font-semibold">Nyerési Arány</div>
+                    <div id="br-winrate" class="text-xl font-bold font-mono text-cyan-400 mt-1">0.00%</div>
+                </div>
+                <div class="card p-4 rounded-lg">
+                    <div class="text-[11px] text-slate-400 uppercase font-semibold">Lezárt / Összes Tét</div>
+                    <div id="br-counts" class="text-xl font-bold font-mono text-slate-300 mt-1">0 / 0</div>
+                </div>
+                <div class="card p-4 rounded-lg">
+                    <div class="text-[11px] text-slate-400 uppercase font-semibold">Függőben Tét</div>
+                    <div id="br-pending" class="text-xl font-bold font-mono text-amber-400 mt-1">0 Ft</div>
+                </div>
+            </div>
+
+            <!-- Equity Curve -->
+            <div class="card p-5 rounded-lg space-y-3">
+                <div class="flex justify-between items-center">
+                    <span class="text-xs uppercase font-semibold text-slate-400 tracking-wider">Kumulatív Tőkegörbe (Equity Curve)</span>
+                </div>
+                <div class="h-60 w-full">
+                    <canvas id="equityChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Betting Log Table -->
+            <div class="card rounded-lg overflow-hidden">
+                <div class="p-3.5 bg-slate-900 border-b border-slate-800 flex justify-between items-center">
+                    <span class="text-xs uppercase font-semibold text-slate-300">Rögzített Fogadások Naplója</span>
+                    <span class="text-[11px] text-slate-500">A záró odds beírása után kilépve automatikusan mentődik (CLV)</span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs">
+                        <thead class="bg-slate-900/90 text-slate-400 uppercase font-semibold border-b border-slate-800">
+                            <tr>
+                                <th class="p-3">Kezdés (Budapest)</th>
+                                <th class="p-3">Mérkőzés</th>
+                                <th class="p-3 text-center">Tipp</th>
+                                <th class="p-3 text-right">Megjátszott Odds</th>
+                                <th class="p-3 text-center bg-slate-800/40 text-emerald-400">Záró Odds (CLV) ✍️</th>
+                                <th class="p-3 text-right">Tét (Ft)</th>
+                                <th class="p-3 text-right">EV %</th>
+                                <th class="p-3 text-center">Állapot</th>
+                                <th class="p-3 text-right">PnL</th>
+                                <th class="p-3 text-center">Kézi Felülbírálás</th>
+                            </tr>
+                        </thead>
+                        <tbody id="bets-table-body" class="divide-y divide-slate-800 text-slate-300 font-mono">
+                            <tr>
+                                <td colspan="10" class="p-8 text-center text-slate-500 font-sans">Még nincs rögzített fogadásod.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 3: LEAGUE TABLE -->
+        <section id="tab-table" class="space-y-6 hidden">
+            <div class="flex justify-between items-center flex-wrap gap-4">
+                <div>
+                    <h1 class="text-2xl font-bold text-white">Premier League Tabella & Elo Erősorrend</h1>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <span class="text-xs text-slate-400 mr-1">Rendezés:</span>
+                    <button id="btn-sort-rank" onclick="renderTable('rank')" class="px-3 py-1.5 rounded text-xs font-semibold bg-emerald-500 text-black transition">Hivatalos Tabella</button>
+                    <button id="btn-sort-elo" onclick="renderTable('elo')" class="px-3 py-1.5 rounded text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700 hover:text-white transition">⚡ Elo Power Ranking</button>
+                </div>
+            </div>
+
+            <div class="card rounded-lg overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm">
+                        <thead class="bg-slate-900 border-b border-slate-800 text-slate-400 text-xs uppercase font-semibold">
+                            <tr>
+                                <th class="p-4 w-12 text-center">#</th>
+                                <th class="p-4">Csapat</th>
+                                <th class="p-4 text-center">Elo Érték</th>
+                                <th class="p-4 text-center">Mérkőzés</th>
+                                <th class="p-4 text-center">Gy</th>
+                                <th class="p-4 text-center">D</th>
+                                <th class="p-4 text-center">V</th>
+                                <th class="p-4 text-center">Gólkülönbség</th>
+                                <th class="p-4 text-center font-bold text-white">Pont</th>
+                            </tr>
+                        </thead>
+                        <tbody id="league-table-body" class="divide-y divide-slate-800 text-slate-300">
+                            <tr>
+                                <td colspan="9" class="p-8 text-center text-slate-500">Tabella betöltése...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 4: MAINTENANCE -->
+        <section id="tab-pipeline" class="space-y-6 hidden">
+            <div>
+                <h1 class="text-2xl font-bold text-white">Rendszer Karbantartás</h1>
+                <p class="text-slate-400 text-sm">A heti frissítéshez a fenti zöld <b>"🚀 Heti Fordulózárás (Master Sync)"</b> gombot használd! A modell újratanítása hetente felesleges.</p>
+            </div>
+
+            <div class="card p-5 rounded-lg border-2 border-rose-900/60 bg-rose-950/20 space-y-3">
+                <div class="text-rose-400 font-bold text-sm">⚠️ MODELL ÚJRATANÍTÁSA (Csak 1-2 havonta szükséges)</div>
+                <p class="text-xs text-slate-300">
+                    Az XGBoost modell több ezer mérkőzés tapasztalatát tárolja. A heti 10 meccs miatt nem érdemes újratanítani, az Elo és xG EMA mutatók enélkül is valós időben frissülnek.
+                </p>
+                <button onclick="confirmAndRetrainModel()" class="bg-rose-900/80 hover:bg-rose-800 text-rose-200 border border-rose-700 font-semibold px-4 py-2 rounded text-xs transition">
+                    🧠 Modell Újratanítása (!ml_predict_probabilities.py)
+                </button>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- BET PLACEMENT MODAL -->
+    <div id="modal-bet" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center hidden">
+        <div class="card w-full max-w-md p-6 rounded-xl border border-slate-700 shadow-2xl space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                <h3 class="text-base font-bold text-white flex items-center space-x-2">
+                    <span class="text-emerald-400">⚡</span>
+                    <span>Fogadás Rögzítése</span>
+                </h3>
+                <button onclick="closeBetModal()" class="text-slate-400 hover:text-white text-lg">✕</button>
+            </div>
+            
+            <div class="space-y-3 text-xs">
+                <div>
+                    <label class="text-slate-400">Mérkőzés</label>
+                    <div id="modal-match-name" class="font-bold text-white text-sm mt-0.5">-</div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-slate-400">Kimenetel (Tipp)</label>
+                        <input type="text" id="modal-selection" readonly class="w-full bg-slate-900 border border-slate-800 rounded p-2 text-amber-400 font-bold mt-1">
+                    </div>
+                    <div>
+                        <label class="text-slate-400">Megjátszott Odds</label>
+                        <input type="number" step="0.01" id="modal-odds" class="w-full bg-slate-900 border border-slate-800 rounded p-2 text-white font-mono font-bold mt-1">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-slate-400">Kelly Tét (%)</label>
+                        <input type="number" step="0.01" id="modal-stake-pct" oninput="calculateStakeFromPct()" class="w-full bg-slate-900 border border-slate-800 rounded p-2 text-emerald-400 font-mono font-bold mt-1">
+                    </div>
+                    <div>
+                        <label class="text-slate-400">Tét Összeg (Ft)</label>
+                        <input type="number" step="100" id="modal-stake-amount" class="w-full bg-slate-900 border border-slate-800 rounded p-2 text-white font-mono font-bold mt-1">
+                    </div>
+                </div>
+
+                <input type="hidden" id="modal-match-id">
+                <input type="hidden" id="modal-match-date">
+                <input type="hidden" id="modal-ev-pct">
+            </div>
+
+            <div class="flex justify-end space-x-2 pt-2 border-t border-slate-800">
+                <button onclick="closeBetModal()" class="px-4 py-2 rounded text-xs text-slate-400 hover:text-white bg-slate-800 transition">Mégse</button>
+                <button onclick="submitBetModal()" class="px-5 py-2 rounded text-xs font-bold text-black bg-emerald-400 hover:bg-emerald-300 transition">Rögzítés</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let cachedTable = [];
+        let cachedTips = [];
+        let currentBankrollValue = 100000.0;
+        let equityChartInstance = null;
+        let matchFilter = 'current'; // 'current' or 'all'
+        let pendingBetsSet = new Set(); // Duplicate filtering: "matchId_selection"
+
+        function switchTab(tab) {
+            ['tips', 'bankroll', 'table', 'pipeline'].forEach(t => {
+                document.getElementById(`tab-${t}`).classList.add('hidden');
+                document.getElementById(`tab-${t}-btn`).className = "px-3.5 py-1.5 rounded font-medium text-xs transition text-slate-400 hover:text-white";
+            });
+            document.getElementById(`tab-${tab}`).classList.remove('hidden');
+            document.getElementById(`tab-${tab}-btn`).className = "px-3.5 py-1.5 rounded font-medium text-xs transition bg-emerald-500 text-black";
+
+            if (tab === 'tips') loadTips(false);
+            if (tab === 'bankroll') loadBankroll();
+            if (tab === 'table') loadTable();
+        }
+
+        function setMatchFilter(mode) {
+            matchFilter = mode;
+            document.getElementById('filter-current-btn').className = (mode === 'current') 
+                ? "px-2.5 py-1 rounded font-semibold bg-emerald-500 text-black transition"
+                : "px-2.5 py-1 rounded text-slate-400 hover:text-white transition";
+            document.getElementById('filter-all-btn').className = (mode === 'all') 
+                ? "px-2.5 py-1 rounded font-semibold bg-emerald-500 text-black transition"
+                : "px-2.5 py-1 rounded text-slate-400 hover:text-white transition";
+            renderMatches();
+        }
+
+        function toggleMatch(id) {
+            const panel = document.getElementById(`panel-${id}`);
+            const arrow = document.getElementById(`arrow-${id}`);
+            panel.classList.toggle('hidden');
+            arrow.style.transform = panel.classList.contains('hidden') ? "rotate(0deg)" : "rotate(180deg)";
+        }
+
+        function toggleTeamRow(id) {
+            document.getElementById(`team-panel-${id}`).classList.toggle('hidden');
+        }
+
+        // --- ⚡ QUICK ODDS UPDATE (Fetches odds without running the full pipeline) ---
+        async function triggerPredictionsOnly() {
+            const btn = document.getElementById('btn-quick-odds');
+            const logWrapper = document.getElementById('sync-log-wrapper');
+            const logOutput = document.getElementById('sync-console-output');
+
+            btn.disabled = true;
+            btn.classList.add('opacity-50');
+            btn.innerText = "⏳ Oddsok Lekérése...";
+            logWrapper.classList.remove('hidden');
+            logOutput.innerText = "Friss piaci oddsok és valószínűségek letöltése (!live_predictor.py)...\n";
+
+            try {
+                const res = await fetch('/api/run-predictions', { method: 'POST' });
+                const json = await res.json();
+                logOutput.innerText = json.log || "Kész.";
+                loadTips(false);
+            } catch (e) {
+                logOutput.innerText += "\nHiba: " + e;
+            } finally {
+                btn.disabled = false;
+                btn.classList.remove('opacity-50');
+                btn.innerText = "⚡ Friss Oddsok Lekérése (5 mp)";
+            }
+        }
+
+        // --- 🚀 WEEKLY MASTER SYNC ---
+        async function runMasterSync() {
+            const btn = document.getElementById('btn-master-sync');
+            const logWrapper = document.getElementById('sync-log-wrapper');
+            const logOutput = document.getElementById('sync-console-output');
+
+            btn.disabled = true;
+            btn.classList.add('opacity-50');
+            btn.innerText = "⏳ Heti Frissítés Fut...";
+            logWrapper.classList.remove('hidden');
+            logOutput.innerText = "Heti zárás elindítva: Meccsek automatikus kiértékelése -> Új adatok letöltése -> Elo számítás -> Új tippek generálása...\n\n";
+
+            try {
+                const res = await fetch('/api/master-sync', { method: 'POST' });
+                const json = await res.json();
+                logOutput.innerText = json.log;
+                loadTips(false);
+                loadBankroll();
+                loadTable();
+                alert(json.success ? "✅ Heti zárás és szinkronizáció sikeresen lefutott!" : "Hiba történt!");
+            } catch (e) {
+                logOutput.innerText += "\nHiba: " + e;
+            } finally {
+                btn.disabled = false;
+                btn.classList.remove('opacity-50');
+                btn.innerText = "🚀 Heti Fordulózárás (Master Sync)";
+            }
+        }
+
+        // --- INLINE CLOSING ODDS SAVING ---
+        async function saveClosingOddsInline(betId, inputElem) {
+            const val = parseFloat(inputElem.value) || 0.0;
+            inputElem.classList.add('border-amber-500');
+            try {
+                const res = await fetch('/api/bankroll/update-closing-odds', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ bet_id: betId, odds_closing: val })
+                });
+                const json = await res.json();
+                if (json.success) {
+                    inputElem.classList.remove('border-amber-500');
+                    inputElem.classList.add('border-emerald-500');
+                    setTimeout(() => inputElem.classList.remove('border-emerald-500'), 1500);
+                }
+            } catch (e) { alert("Hiba a mentéskor: " + e); }
+        }
+
+        // --- AUTO-SETTLE BETS (FOTMOB) ---
+        async function autoSettleBets() {
+            try {
+                const res = await fetch('/api/bankroll/auto-settle', { method: 'POST' });
+                const json = await res.json();
+                alert(json.log);
+                loadBankroll();
+            } catch (e) { alert("Hiba: " + e); }
+        }
+
+        // --- LOAD TIPS & DUPLICATE PROTECTION ---
+        async function loadTips(showFeedback = false) {
+            try {
+                // Fetch pending bets to filter out duplicates
+                const bRes = await fetch('/api/bankroll/bets');
+                const bJson = await bRes.json();
+                pendingBetsSet.clear();
+                if (bJson.success && bJson.bets) {
+                    bJson.bets.filter(b => b.status === 'PENDING').forEach(b => {
+                        pendingBetsSet.add(`${b.match_id}_${b.selection}`);
+                    });
+                }
+
+                const sRes = await fetch('/api/bankroll/summary');
+                const sJson = await sRes.json();
+                if (sJson.success) currentBankrollValue = sJson.current_bankroll || 100000.0;
+
+                const res = await fetch('/api/tips');
+                const json = await res.json();
+
+                if (!json.success || !json.data || json.data.length === 0) {
+                    document.getElementById('matches-container').innerHTML = `<div class="card p-8 text-center text-slate-500">Nincs megjeleníthető meccs. Nyomj a fenti "Friss Oddsok Lekérése" gombra!</div>`;
+                    return;
+                }
+
+                cachedTips = json.data;
+                renderMatches();
+
+            } catch (err) { console.error(err); }
+        }
+
+        function renderMatches() {
+            const container = document.getElementById('matches-container');
+            container.innerHTML = "";
+
+            // Filter for the upcoming matchweek (Days_Until <= 5 days) or show all 25 matches
+            const displayList = cachedTips.filter(m => {
+                if (matchFilter === 'current') return (m.Days_Until !== undefined ? m.Days_Until <= 5 : true);
+                return true;
+            });
+
+            let total = displayList.length;
+            let valueCount = 0;
+            let anomalyCount = 0;
+            let sumStake = 0;
+
+            displayList.forEach((m, idx) => {
+                const isAnyValue = (m.Status_1 && m.Status_1.includes("VALUE")) ||
+                                   (m.Status_X && m.Status_X.includes("VALUE")) ||
+                                   (m.Status_2 && m.Status_2.includes("VALUE"));
+                if (isAnyValue) valueCount++;
+
+                const isAnyAnomaly = (m.Status_1 && m.Status_1.includes("ANOMÁLIA")) ||
+                                     (m.Status_X && m.Status_X.includes("ANOMÁLIA")) ||
+                                     (m.Status_2 && m.Status_2.includes("ANOMÁLIA"));
+                if (isAnyAnomaly) anomalyCount++;
+
+                sumStake += (parseFloat(m.Kelly_1) || 0) + (parseFloat(m.Kelly_X) || 0) + (parseFloat(m.Kelly_2) || 0);
+
+                let headerBadge = "bg-slate-800 text-slate-400 border border-slate-700";
+                let headerBadgeText = "⚪ NINCS ÉRTÉK";
+                if (isAnyValue) {
+                    headerBadge = "bg-emerald-950 text-emerald-400 border border-emerald-800 font-bold";
+                    headerBadgeText = "🔥 VALUE BET";
+                } else if (isAnyAnomaly) {
+                    headerBadge = "bg-rose-950 text-rose-400 border border-rose-800";
+                    headerBadgeText = "⚠️ ANOMÁLIA";
+                }
+
+                // Play button generator (Disabled if already played)
+                const renderPlayButton = (selName, odds, kelly, ev) => {
+                    const isAlreadyPlayed = pendingBetsSet.has(`${m.Meccs_ID}_${selName}`);
+                    if (isAlreadyPlayed) {
+                        return `<button disabled class="mt-3 w-full bg-slate-900/80 text-emerald-500/70 border border-emerald-900/50 py-1.5 rounded text-xs font-semibold cursor-not-allowed">✓ Megjátszva (Függőben)</button>`;
+                    }
+                    return `<button onclick="openBetModal('${m.Meccs}', '${m.Datum}', ${m.Meccs_ID || 0}, '${selName}', ${odds || 0}, ${kelly || 0}, ${ev || 0})" class="mt-3 w-full bg-slate-800 hover:bg-emerald-600 hover:text-black text-slate-300 font-semibold py-1.5 rounded text-xs transition border border-slate-700 hover:border-emerald-500">+ Megjátszom</button>`;
+                };
+
+                const homeLogoHtml = m.Home_Logo ? `<img src="${m.Home_Logo}" class="w-6 h-6 object-contain inline-block mr-1" alt="" onerror="this.style.display='none'">` : '';
+                const awayLogoHtml = m.Away_Logo ? `<img src="${m.Away_Logo}" class="w-6 h-6 object-contain inline-block ml-1" alt="" onerror="this.style.display='none'">` : '';
+
+                // Matchweek indicator badge
+                const isCurrentRound = (m.Days_Until !== undefined && m.Days_Until <= 5);
+                const roundBadge = isCurrentRound 
+                    ? `<span class="text-[10px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-800 px-1.5 py-0.5 rounded">⚡ KÖVETKEZŐ FORDULÓ</span>`
+                    : `<span class="text-[10px] font-semibold bg-slate-800 text-slate-400 border border-slate-700 px-1.5 py-0.5 rounded">⏳ Későbbi (${m.Days_Until} nap múlva)</span>`;
+
+                container.innerHTML += `
+                    <div class="card rounded-lg overflow-hidden border border-slate-800 hover:border-slate-700 transition">
+                        <div onclick="toggleMatch(${idx})" class="p-4 flex justify-between items-center cursor-pointer hover:bg-slate-800/40 select-none">
+                            <div class="flex items-center space-x-3">
+                                ${roundBadge}
+                                <span class="text-xs font-mono bg-slate-900 px-2 py-1 rounded text-slate-300 border border-slate-800">${m.Datum || "-"}</span>
+                                <div class="flex items-center space-x-2 font-bold text-white text-base">
+                                    ${homeLogoHtml}
+                                    <span>${m.Hazai}</span>
+                                    <span class="text-slate-500 text-xs font-normal">vs</span>
+                                    <span>${m.Vendeg}</span>
+                                    ${awayLogoHtml}
+                                </div>
+                            </div>
+                            
+                            <div class="flex items-center space-x-6">
+                                <div class="hidden sm:flex items-center space-x-2 text-xs font-mono">
+                                    <span class="text-emerald-400 font-bold">${m['Hazai_%']}%</span>
+                                    <span class="text-slate-600">|</span>
+                                    <span class="text-slate-300">${m['X_%']}%</span>
+                                    <span class="text-slate-600">|</span>
+                                    <span class="text-cyan-400 font-bold">${m['Vendeg_%']}%</span>
+                                </div>
+                                <span class="px-2.5 py-1 rounded text-xs ${headerBadge}">${headerBadgeText}</span>
+                                <svg id="arrow-${idx}" class="w-5 h-5 text-slate-400 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                            </div>
+                        </div>
+
+                        <div id="panel-${idx}" class="hidden p-5 bg-slate-900/60 border-t border-slate-800/80 space-y-5">
+                            <div>
+                                <div class="text-xs uppercase font-semibold text-slate-400 mb-2">1X2 Teljes Elemzés</div>
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                    
+                                    <!-- Hazai -->
+                                    <div class="inner-card p-3 rounded-lg flex flex-col justify-between">
+                                        <div>
+                                            <div class="flex justify-between items-center text-xs font-semibold text-slate-300">
+                                                <span>HAZAI (1)</span>
+                                                <span class="${m.Status_1 && m.Status_1.includes('VALUE') ? 'text-emerald-400 font-bold' : 'text-slate-500'}">${m.Status_1 || "-"}</span>
+                                            </div>
+                                            <div class="mt-2 grid grid-cols-2 gap-1 text-xs font-mono">
+                                                <span class="text-slate-400">Iroda: <b class="text-white">${Number(m.Odds_1 || 0).toFixed(2)}</b></span>
+                                                <span class="text-slate-400">Fair: <b class="text-slate-300">${Number(m.Fair_1 || 0).toFixed(2)}</b></span>
+                                                <span class="text-slate-400">EV: <b class="${m.EV_1 > 0 ? 'text-cyan-400' : 'text-slate-500'}">${m.EV_1 > 0 ? '+' : ''}${Number(m.EV_1 || 0).toFixed(2)}%</b></span>
+                                                <span class="text-slate-400">Kelly: <b class="${m.Kelly_1 > 0 ? 'text-emerald-400' : 'text-slate-500'}">${m.Kelly_1 > 0 ? Number(m.Kelly_1).toFixed(2) + '%' : '-'}</b></span>
+                                            </div>
+                                        </div>
+                                        ${renderPlayButton('Hazai (1)', m.Odds_1, m.Kelly_1, m.EV_1)}
+                                    </div>
+
+                                    <!-- Döntetlen -->
+                                    <div class="inner-card p-3 rounded-lg flex flex-col justify-between">
+                                        <div>
+                                            <div class="flex justify-between items-center text-xs font-semibold text-slate-300">
+                                                <span>DÖNTETLEN (X)</span>
+                                                <span class="${m.Status_X && m.Status_X.includes('VALUE') ? 'text-emerald-400 font-bold' : 'text-slate-500'}">${m.Status_X || "-"}</span>
+                                            </div>
+                                            <div class="mt-2 grid grid-cols-2 gap-1 text-xs font-mono">
+                                                <span class="text-slate-400">Iroda: <b class="text-white">${Number(m.Odds_X || 0).toFixed(2)}</b></span>
+                                                <span class="text-slate-400">Fair: <b class="text-slate-300">${Number(m.Fair_X || 0).toFixed(2)}</b></span>
+                                                <span class="text-slate-400">EV: <b class="${m.EV_X > 0 ? 'text-cyan-400' : 'text-slate-500'}">${m.EV_X > 0 ? '+' : ''}${Number(m.EV_X || 0).toFixed(2)}%</b></span>
+                                                <span class="text-slate-400">Kelly: <b class="${m.Kelly_X > 0 ? 'text-emerald-400' : 'text-slate-500'}">${m.Kelly_X > 0 ? Number(m.Kelly_X).toFixed(2) + '%' : '-'}</b></span>
+                                            </div>
+                                        </div>
+                                        ${renderPlayButton('Döntetlen (X)', m.Odds_X, m.Kelly_X, m.EV_X)}
+                                    </div>
+
+                                    <!-- Vendég -->
+                                    <div class="inner-card p-3 rounded-lg flex flex-col justify-between">
+                                        <div>
+                                            <div class="flex justify-between items-center text-xs font-semibold text-slate-300">
+                                                <span>VENDÉG (2)</span>
+                                                <span class="${m.Status_2 && m.Status_2.includes('VALUE') ? 'text-emerald-400 font-bold' : 'text-slate-500'}">${m.Status_2 || "-"}</span>
+                                            </div>
+                                            <div class="mt-2 grid grid-cols-2 gap-1 text-xs font-mono">
+                                                <span class="text-slate-400">Iroda: <b class="text-white">${Number(m.Odds_2 || 0).toFixed(2)}</b></span>
+                                                <span class="text-slate-400">Fair: <b class="text-slate-300">${Number(m.Fair_2 || 0).toFixed(2)}</b></span>
+                                                <span class="text-slate-400">EV: <b class="${m.EV_2 > 0 ? 'text-cyan-400' : 'text-slate-500'}">${m.EV_2 > 0 ? '+' : ''}${Number(m.EV_2 || 0).toFixed(2)}%</b></span>
+                                                <span class="text-slate-400">Kelly: <b class="${m.Kelly_2 > 0 ? 'text-emerald-400' : 'text-slate-500'}">${m.Kelly_2 > 0 ? Number(m.Kelly_2).toFixed(2) + '%' : '-'}</b></span>
+                                            </div>
+                                        </div>
+                                        ${renderPlayButton('Vendég (2)', m.Odds_2, m.Kelly_2, m.EV_2)}
+                                    </div>
+
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            document.getElementById('stat-total').innerText = total + " db";
+            document.getElementById('stat-value').innerText = valueCount + " db";
+            document.getElementById('stat-anomaly').innerText = anomalyCount + " db";
+            document.getElementById('stat-stake').innerText = sumStake.toFixed(2) + "%";
+        }
+
+        // --- LOAD BANKROLL ---
+        async function loadBankroll() {
+            try {
+                const sRes = await fetch('/api/bankroll/summary');
+                const sJson = await sRes.json();
+                
+                if (sJson.success) {
+                    currentBankrollValue = sJson.current_bankroll;
+                    document.getElementById('input-init-bankroll').value = sJson.initial_bankroll;
+                    
+                    const formatFt = (n) => Math.round(n).toLocaleString('hu-HU') + " Ft";
+                    document.getElementById('br-current').innerText = formatFt(sJson.current_bankroll);
+                    
+                    const pnlElem = document.getElementById('br-pnl');
+                    pnlElem.innerText = (sJson.total_pnl > 0 ? '+' : '') + formatFt(sJson.total_pnl);
+                    pnlElem.className = "text-xl font-bold font-mono mt-1 " + (sJson.total_pnl > 0 ? 'text-emerald-400' : (sJson.total_pnl < 0 ? 'text-rose-400' : 'text-slate-400'));
+
+                    const roiElem = document.getElementById('br-roi');
+                    roiElem.innerText = (sJson.roi > 0 ? '+' : '') + sJson.roi.toFixed(2) + "%";
+                    roiElem.className = "text-xl font-bold font-mono mt-1 " + (sJson.roi > 0 ? 'text-emerald-400' : (sJson.roi < 0 ? 'text-rose-400' : 'text-slate-400'));
+
+                    document.getElementById('br-winrate').innerText = sJson.win_rate.toFixed(1) + "%";
+                    document.getElementById('br-counts').innerText = `${sJson.settled_bets} / ${sJson.total_bets}`;
+                    document.getElementById('br-pending').innerText = formatFt(sJson.pending_staked);
+
+                    renderEquityChart(sJson.chart_points);
+                }
+
+                const bRes = await fetch('/api/bankroll/bets');
+                const bJson = await bRes.json();
+                const tbody = document.getElementById('bets-table-body');
+                tbody.innerHTML = "";
+
+                if (!bJson.success || !bJson.bets || bJson.bets.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="10" class="p-8 text-center text-slate-500 font-sans">Még nincs rögzített fogadás. A Meccsek fülön tudsz rögzíteni!</td></tr>`;
+                    return;
+                }
+
+                bJson.bets.forEach(b => {
+                    let statusBadge = "bg-slate-800 text-amber-400 border border-amber-800";
+                    let statusText = "Függőben";
+                    if (b.status === 'WON') { statusBadge = "bg-emerald-950 text-emerald-400 border border-emerald-800"; statusText = "NYERT"; }
+                    if (b.status === 'LOST') { statusBadge = "bg-rose-950 text-rose-400 border border-rose-800"; statusText = "VESZTETT"; }
+                    if (b.status === 'VOID') { statusBadge = "bg-slate-800 text-slate-400 border border-slate-700"; statusText = "VOID"; }
+
+                    let pnlStr = "-";
+                    let pnlClass = "text-slate-500";
+                    if (b.status !== 'PENDING') {
+                        const pnlVal = Number(b.pnl || 0);
+                        pnlStr = (pnlVal > 0 ? '+' : '') + Math.round(pnlVal).toLocaleString('hu-HU') + " Ft";
+                        pnlClass = pnlVal > 0 ? 'text-emerald-400 font-bold' : (pnlVal < 0 ? 'text-rose-400 font-bold' : 'text-slate-400');
+                    }
+
+                    const closingOddsVal = (b.odds_closing && b.odds_closing > 0) ? Number(b.odds_closing).toFixed(2) : "";
+
+                    tbody.innerHTML += `
+                        <tr class="hover:bg-slate-800/40 transition">
+                            <td class="p-3 text-slate-400">${b.match_date || "-"}</td>
+                            <td class="p-3 font-sans font-bold text-white">${b.match_name}</td>
+                            <td class="p-3 text-center text-amber-400 font-bold">${b.selection}</td>
+                            <td class="p-3 text-right font-bold text-white">${Number(b.odds_placed).toFixed(2)}</td>
+                            
+                            <!-- INLINE ZÁRÓ ODDS BEVITEL -->
+                            <td class="p-2 text-center bg-slate-900/40">
+                                <input type="number" step="0.01" value="${closingOddsVal}" placeholder="pl. 2.15" 
+                                    onchange="saveClosingOddsInline(${b.id}, this)"
+                                    class="w-20 bg-slate-800 text-center font-bold text-emerald-400 border border-slate-700 rounded px-1 py-1 focus:border-emerald-400 outline-none transition">
+                            </td>
+
+                            <td class="p-3 text-right text-slate-200">${Math.round(b.stake_amount).toLocaleString('hu-HU')} Ft</td>
+                            <td class="p-3 text-right text-cyan-400">+${Number(b.ev_pct).toFixed(1)}%</td>
+                            <td class="p-3 text-center"><span class="px-2 py-0.5 rounded text-[10px] font-sans font-semibold ${statusBadge}">${statusText}</span></td>
+                            <td class="p-3 text-right font-bold ${pnlClass}">${pnlStr}</td>
+                            <td class="p-3 text-center font-sans space-x-1">
+                                ${b.status === 'PENDING' ? `
+                                    <button onclick="settleBet(${b.id}, 'WON')" class="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-emerald-950 text-slate-400 hover:text-emerald-400 border border-slate-700 text-[10px]" title="Kézi jóváhagyás">Nyert</button>
+                                    <button onclick="settleBet(${b.id}, 'LOST')" class="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-400 border border-slate-700 text-[10px]" title="Kézi jóváhagyás">Vesztett</button>
+                                ` : ''}
+                                <button onclick="deleteBet(${b.id})" class="text-slate-600 hover:text-rose-400 p-1 text-xs" title="Törlés">✕</button>
+                            </td>
+                        </tr>
+                    `;
+                });
+
+            } catch (err) { console.error(err); }
+        }
+
+        function renderEquityChart(points) {
+            if (!points || points.length === 0) return;
+            const ctx = document.getElementById('equityChart').getContext('2d');
+            const labels = points.map(p => p.label);
+            const data = points.map(p => p.bankroll);
+
+            if (equityChartInstance) equityChartInstance.destroy();
+
+            equityChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Tőkeegyenleg (Ft)',
+                        data: data,
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.08)',
+                        borderWidth: 2,
+                        tension: 0.25,
+                        fill: true,
+                        pointBackgroundColor: '#10b981',
+                        pointRadius: 3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { grid: { color: 'rgba(30, 41, 59, 0.5)' }, ticks: { color: '#64748b', font: { size: 10 } } },
+                        y: { grid: { color: 'rgba(30, 41, 59, 0.5)' }, ticks: { color: '#94a3b8', font: { size: 10 }, callback: (v) => Math.round(v).toLocaleString('hu-HU') + ' Ft' } }
+                    }
+                }
+            });
+        }
+
+        function openBetModal(matchName, matchDate, matchId, selection, odds, kellyPct, evPct) {
+            document.getElementById('modal-match-name').innerText = matchName;
+            document.getElementById('modal-selection').value = selection;
+            document.getElementById('modal-odds').value = Number(odds || 0).toFixed(2);
+            document.getElementById('modal-match-id').value = matchId;
+            document.getElementById('modal-match-date').value = matchDate;
+            document.getElementById('modal-ev-pct').value = evPct;
+
+            const pct = kellyPct > 0 ? kellyPct : 1.0;
+            document.getElementById('modal-stake-pct').value = Number(pct).toFixed(2);
+            
+            const stakeAmt = Math.round((currentBankrollValue * (pct / 100)) / 100) * 100;
+            document.getElementById('modal-stake-amount').value = stakeAmt > 0 ? stakeAmt : 1000;
+
+            document.getElementById('modal-bet').classList.remove('hidden');
+        }
+
+        function closeBetModal() { document.getElementById('modal-bet').classList.add('hidden'); }
+
+        function calculateStakeFromPct() {
+            const pct = parseFloat(document.getElementById('modal-stake-pct').value) || 0;
+            const amt = Math.round((currentBankrollValue * (pct / 100)) / 100) * 100;
+            document.getElementById('modal-stake-amount').value = amt;
+        }
+
+        async function submitBetModal() {
+            const payload = {
+                match_name: document.getElementById('modal-match-name').innerText,
+                match_date: document.getElementById('modal-match-date').value,
+                match_id: parseInt(document.getElementById('modal-match-id').value) || 0,
+                selection: document.getElementById('modal-selection').value,
+                odds_placed: parseFloat(document.getElementById('modal-odds').value) || 1.0,
+                stake_pct: parseFloat(document.getElementById('modal-stake-pct').value) || 0.0,
+                stake_amount: parseFloat(document.getElementById('modal-stake-amount').value) || 0.0,
+                ev_pct: parseFloat(document.getElementById('modal-ev-pct').value) || 0.0
+            };
+
+            try {
+                await fetch('/api/bankroll/add', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                closeBetModal();
+                loadTips(false);
+                alert("Fogadás rögzítve!");
+            } catch (e) { alert("Hiba: " + e); }
+        }
+
+        async function settleBet(id, result) {
+            try {
+                await fetch('/api/bankroll/settle', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ bet_id: id, result: result })
+                });
+                loadBankroll();
+            } catch (e) { alert("Hiba: " + e); }
+        }
+
+        async function deleteBet(id) {
+            if (!confirm("Biztosan törlöd ezt a tétet?")) return;
+            try {
+                await fetch('/api/bankroll/delete', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ bet_id: id })
+                });
+                loadBankroll();
+            } catch (e) { alert("Hiba: " + e); }
+        }
+
+        async function updateBankrollSettings() {
+            const initVal = parseFloat(document.getElementById('input-init-bankroll').value);
+            if (isNaN(initVal) || initVal <= 0) return;
+            try {
+                await fetch('/api/bankroll/settings', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ initial_bankroll: initVal })
+                });
+                loadBankroll();
+            } catch (e) { alert("Hiba: " + e); }
+        }
+
+        async function loadTable() {
+            try {
+                const res = await fetch('/api/table');
+                const json = await res.json();
+                if (json.success && json.table) {
+                    cachedTable = json.table;
+                    renderTable('rank');
+                }
+            } catch (e) { console.error(e); }
+        }
+
+        function renderTable(sortBy = 'rank') {
+            const tbody = document.getElementById('league-table-body');
+            tbody.innerHTML = "";
+
+            document.getElementById('btn-sort-rank').className = (sortBy === 'rank') 
+                ? "px-3 py-1.5 rounded text-xs font-semibold bg-emerald-500 text-black transition"
+                : "px-3 py-1.5 rounded text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700 hover:text-white transition";
+
+            document.getElementById('btn-sort-elo').className = (sortBy === 'elo')
+                ? "px-3 py-1.5 rounded text-xs font-semibold bg-cyan-400 text-black transition font-bold"
+                : "px-3 py-1.5 rounded text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700 hover:text-white transition";
+
+            let displayList = [...cachedTable];
+            if (sortBy === 'elo') displayList.sort((a, b) => (b.elo || 0) - (a.elo || 0));
+            else displayList.sort((a, b) => (a.rank || 0) - (b.rank || 0));
+
+            displayList.forEach((r, idx) => {
+                const rankNum = (sortBy === 'rank') ? r.rank : (idx + 1);
+                let rankClass = "text-slate-400";
+                if (rankNum <= 4) rankClass = "text-cyan-400 font-bold";
+                else if (rankNum === 5) rankClass = "text-indigo-400 font-bold";
+                else if (rankNum >= 18) rankClass = "text-rose-400 font-bold";
+
+                const logoTag = r.logo ? `<img src="${r.logo}" class="w-5 h-5 object-contain inline-block mr-2" alt="" onerror="this.style.display='none'">` : '';
+
+                let formPills = "";
+                if (r.last_5 && r.last_5.length > 0) {
+                    r.last_5.forEach(m => {
+                        let bClass = m.res === 'W' ? 'badge-w' : (m.res === 'D' ? 'badge-d' : 'badge-l');
+                        formPills += `<span class="px-1.5 py-0.5 text-[10px] font-bold rounded ${bClass}" title="${m.opp} (${m.score})">${m.res}</span> `;
+                    });
+                }
+
+                tbody.innerHTML += `
+                    <tr onclick="toggleTeamRow(${idx})" class="hover:bg-slate-800/50 cursor-pointer transition select-none">
+                        <td class="p-3 text-center ${rankClass}">${rankNum}</td>
+                        <td class="p-3 font-semibold text-white flex items-center">${logoTag}<span>${r.team}</span></td>
+                        <td class="p-3 text-center font-mono font-bold text-cyan-400">${Number(r.elo || 1500).toFixed(1)}</td>
+                        <td class="p-3 text-center text-slate-300 font-mono">${r.played}</td>
+                        <td class="p-3 text-center text-slate-400 font-mono">${r.wins}</td>
+                        <td class="p-3 text-center text-slate-400 font-mono">${r.draws}</td>
+                        <td class="p-3 text-center text-slate-400 font-mono">${r.losses}</td>
+                        <td class="p-3 text-center font-mono ${r.goalConDiff > 0 ? 'text-emerald-400' : (r.goalConDiff < 0 ? 'text-rose-400' : 'text-slate-400')}">${r.goalConDiff > 0 ? '+' : ''}${r.goalConDiff}</td>
+                        <td class="p-3 text-center font-bold text-white font-mono">${r.pts}</td>
+                    </tr>
+                    <tr id="team-panel-${idx}" class="hidden bg-slate-900/80">
+                        <td colspan="9" class="p-4 px-8 border-b border-slate-800">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                                <div>
+                                    <div class="text-slate-400 font-semibold mb-1 uppercase">Forma:</div>
+                                    <div class="flex items-center space-x-1">${formPills}</div>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2 text-slate-300 font-mono">
+                                    <div>Támadó xG (EMA): <b class="text-emerald-400">${Number(r.xg_att || 0).toFixed(2)}</b></div>
+                                    <div>Védekező xG (EMA): <b class="text-rose-400">${Number(r.xg_def || 0).toFixed(2)}</b></div>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        async function confirmAndRetrainModel() {
+            const first = confirm("FIGYELEM: A modell újratanítása hetente felesleges!\n\nBiztosan el akarod indítani?");
+            if (!first) return;
+            const second = prompt("Írd be: TANÍTÁS", "");
+            if (second !== "TANÍTÁS") return;
+
+            const logWrapper = document.getElementById('sync-log-wrapper');
+            const logOutput = document.getElementById('sync-console-output');
+            logWrapper.classList.remove('hidden');
+            logOutput.innerText = "Modell újratanítása folyamatban (!ml_predict_probabilities.py)...\n";
+
+            try {
+                const res = await fetch('/api/retrain-model', { method: 'POST' });
+                const data = await res.json();
+                logOutput.innerText = data.log;
+                alert("Modell sikeresen újratanítva!");
+            } catch (e) { logOutput.innerText += "\nHiba: " + e; }
+        }
+
+        loadTips(false);
+    </script>
+</body>
+</html>
