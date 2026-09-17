@@ -131,14 +131,22 @@ if __name__ == "__main__":
     df_odds['Merge_Home'] = df_odds['HomeTeam'].apply(clean_name)
     df_odds['Merge_Away'] = df_odds['AwayTeam'].apply(clean_name)
 
-    print("Merging predictions with historical odds...")
+    # 1. Convert to datetime
+    df_pred['Match_Date'] = pd.to_datetime(df_pred['Match_Date'])
+    df_odds['Date'] = pd.to_datetime(df_odds['Date'], dayfirst=True)
+
+    # 2. CREATE THE JOIN_DATE COLUMNS (This is what was missing!)
+    df_pred['Join_Date'] = df_pred['Match_Date'].dt.strftime('%Y-%m-%d')
+    df_odds['Join_Date'] = df_odds['Date'].dt.strftime('%Y-%m-%d')
+
+    print("Merging predictions with historical odds using strict dates...")
     df_merged = pd.merge(
         df_pred, df_odds, 
-        left_on=['Merge_Home', 'Merge_Away', 'Home_Goals', 'Away_Goals'], 
-        right_on=['Merge_Home', 'Merge_Away', 'FTHG', 'FTAG'], 
+        left_on=['Join_Date', 'Merge_Home', 'Merge_Away'], 
+        right_on=['Join_Date', 'Merge_Home', 'Merge_Away'], 
         how='inner'
     )
-    df_merged = df_merged.drop_duplicates(subset=['Merge_Home', 'Merge_Away', 'Match_Date'])
+    df_merged = df_merged.drop_duplicates(subset=['Merge_Home', 'Merge_Away', 'Join_Date'])
 
     df_merged['EV_Hazai'] = (df_merged['Esely_Hazai'] * df_merged['Close_H']) - 1
     df_merged['EV_Dontetlen'] = (df_merged['Esely_Dontetlen'] * df_merged['Close_D']) - 1

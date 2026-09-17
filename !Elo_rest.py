@@ -65,6 +65,8 @@ def calculate_elo_and_rest(df):
         elo_dict[home_team] = h_elo + K_FACTOR * (h_actual - h_expected)
         elo_dict[away_team] = a_elo + K_FACTOR * (a_actual - a_expected)
 
+    df = df.copy()
+
     df['Home_PreMatch_Elo'] = home_elos
     df['Away_PreMatch_Elo'] = away_elos
     df['Elo_Diff'] = df['Home_PreMatch_Elo'] - df['Away_PreMatch_Elo'] 

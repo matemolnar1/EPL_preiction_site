@@ -69,6 +69,8 @@ if __name__ == "__main__":
     print("Shifting timelines to capture pre-match state...")
     ema_cols = [col for col in team_timeline.columns if '_EMA_' in col]
 
+    team_timeline = team_timeline.copy()
+
     for col in ema_cols:
         team_timeline[f'PreMatch_{col}'] = team_timeline.groupby('Team_Team')[col].shift(1)
 
